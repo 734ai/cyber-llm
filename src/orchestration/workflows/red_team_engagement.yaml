@@ -1,0 +1,294 @@
+name: "Red Team Engagement Workflow"
+description: "Complete red team engagement from reconnaissance to post-exploitation"
+version: "1.0"
+
+metadata:
+  author: "Cyber-LLM Team"
+  created: "2025-08-05"
+  tags: ["red-team", "full-engagement", "automated"]
+
+parameters:
+  target:
+    type: string
+    description: "Target IP address or domain"
+    required: true
+  scope:
+    type: string
+    description: "Engagement scope (internal/external)"
+    default: "external"
+    enum: ["internal", "external", "hybrid"]
+  stealth_level:
+    type: string
+    description: "Required stealth level"
+    default: "medium"
+    enum: ["low", "medium", "high", "maximum"]
+  timeout:
+    type: integer
+    description: "Maximum workflow timeout in minutes"
+    default: 240
+
+variables:
+  engagement_id: "{{ workflow.run_id }}"
+  start_time: "{{ workflow.start_time }}"
+  target_ip: "{{ parameters.target }}"
+
+agents:
+  - name: safety_agent
+    timeout: 60
+    retry_policy:
+      max_attempts: 2
+      delay: 5
+  - name: recon_agent
+    timeout: 300
+    retry_policy:
+      max_attempts: 3
+      delay: 10
+  - name: explainability_agent
+    timeout: 120
+    retry_policy:
+      max_attempts: 2
+      delay: 5
+  - name: c2_agent
+    timeout: 180
+    retry_policy:
+      max_attempts: 3
+      delay: 15
+  - name: post_exploit_agent
+    timeout: 300
+    retry_policy:
+      max_attempts: 2
+      delay: 20
+
+workflow:
+  steps:
+    - name: "initialization"
+      description: "Initialize engagement and validate parameters"
+      agent: "safety_agent"
+      action: "validate_engagement"
+      inputs:
+        target: "{{ parameters.target }}"
+        scope: "{{ parameters.scope }}"
+        stealth_level: "{{ parameters.stealth_level }}"
+      outputs:
+        - validation_result
+        - risk_assessment
+      conditions:
+        success: "validation_result.approved == true"
+        failure: "stop_workflow"
+
+    - name: "pre_engagement_safety_check"
+      description: "Perform safety and legal compliance check"
+      agent: "safety_agent"
+      action: "compliance_check"
+      inputs:
+        target: "{{ parameters.target }}"
+        engagement_type: "red_team"
+      outputs:
+        - compliance_status
+        - legal_clearance
+      conditions:
+        success: "compliance_status == 'approved'"
+        failure: "stop_workflow"
+
+    - name: "reconnaissance_phase"
+      description: "Perform comprehensive reconnaissance"
+      agent: "recon_agent"
+      action: "full_reconnaissance"
+      inputs:
+        target: "{{ parameters.target }}"
+        stealth_level: "{{ parameters.stealth_level }}"
+        scope: "{{ parameters.scope }}"
+      outputs:
+        - recon_results
+        - identified_services
+        - potential_vulnerabilities
+      parallel: false
+      timeout: 300
+
+    - name: "recon_explanation"
+      description: "Generate explanation for reconnaissance decisions"
+      agent: "explainability_agent"
+      action: "explain_decision"
+      inputs:
+        agent_type: "recon"
+        decision_data: "{{ steps.reconnaissance_phase.outputs }}"
+      outputs:
+        - recon_explanation
+        - recon_risks
+      depends_on: ["reconnaissance_phase"]
+
+    - name: "safety_review_recon"
+      description: "Review reconnaissance results for safety compliance"
+      agent: "safety_agent"
+      action: "review_actions"
+      inputs:
+        actions: "{{ steps.reconnaissance_phase.outputs.actions_taken }}"
+        results: "{{ steps.reconnaissance_phase.outputs.recon_results }}"
+      outputs:
+        - safety_score
+        - recommendations
+      depends_on: ["reconnaissance_phase"]
+      conditions:
+        success: "safety_score >= 0.7"
+        failure: "escalate_to_human"
+
+    - name: "c2_establishment"
+      description: "Establish command and control channel"
+      agent: "c2_agent"
+      action: "establish_c2"
+      inputs:
+        target_info: "{{ steps.reconnaissance_phase.outputs.identified_services }}"
+        stealth_level: "{{ parameters.stealth_level }}"
+        network_constraints: "{{ steps.reconnaissance_phase.outputs.network_info }}"
+      outputs:
+        - c2_channel
+        - beacon_config
+        - payload_info
+      depends_on: ["safety_review_recon"]
+      conditions:
+        success: "c2_channel.status == 'established'"
+
+    - name: "c2_explanation"
+      description: "Generate explanation for C2 decisions"
+      agent: "explainability_agent"
+      action: "explain_decision"
+      inputs:
+        agent_type: "c2"
+        decision_data: "{{ steps.c2_establishment.outputs }}"
+      outputs:
+        - c2_explanation
+        - c2_risks
+      depends_on: ["c2_establishment"]
+
+    - name: "initial_access_validation"
+      description: "Validate initial access and system status"
+      agent: "safety_agent"
+      action: "validate_access"
+      inputs:
+        c2_info: "{{ steps.c2_establishment.outputs }}"
+        target: "{{ parameters.target }}"
+      outputs:
+        - access_status
+        - system_health
+      depends_on: ["c2_establishment"]
+
+    - name: "post_exploitation"
+      description: "Perform post-exploitation activities"
+      agent: "post_exploit_agent"
+      action: "post_exploit_routine"
+      inputs:
+        c2_channel: "{{ steps.c2_establishment.outputs.c2_channel }}"
+        target_info: "{{ steps.reconnaissance_phase.outputs }}"
+        stealth_level: "{{ parameters.stealth_level }}"
+      outputs:
+        - credentials_harvested
+        - lateral_movement_paths
+        - persistence_mechanisms
+        - data_discovered
+      depends_on: ["initial_access_validation"]
+      timeout: 300
+
+    - name: "post_exploit_explanation"
+      description: "Generate explanation for post-exploitation decisions"
+      agent: "explainability_agent"
+      action: "explain_decision"
+      inputs:
+        agent_type: "post_exploit"
+        decision_data: "{{ steps.post_exploitation.outputs }}"
+      outputs:
+        - post_exploit_explanation
+        - post_exploit_risks
+      depends_on: ["post_exploitation"]
+
+    - name: "final_safety_review"
+      description: "Final safety and impact assessment"
+      agent: "safety_agent"
+      action: "final_assessment"
+      inputs:
+        all_actions: "{{ workflow.all_outputs }}"
+        engagement_results: "{{ steps.post_exploitation.outputs }}"
+      outputs:
+        - final_safety_score
+        - impact_assessment
+        - cleanup_recommendations
+      depends_on: ["post_exploitation"]
+
+    - name: "cleanup_phase"
+      description: "Clean up artifacts and close connections"
+      agent: "post_exploit_agent"
+      action: "cleanup"
+      inputs:
+        c2_channel: "{{ steps.c2_establishment.outputs.c2_channel }}"
+        artifacts_created: "{{ steps.post_exploitation.outputs.artifacts }}"
+        cleanup_recommendations: "{{ steps.final_safety_review.outputs.cleanup_recommendations }}"
+      outputs:
+        - cleanup_status
+        - remaining_artifacts
+      depends_on: ["final_safety_review"]
+      always_run: true
+
+error_handling:
+  on_agent_failure:
+    - log_error
+    - notify_human
+    - attempt_graceful_degradation
+  
+  on_timeout:
+    - log_timeout
+    - save_partial_results
+    - initiate_cleanup
+  
+  on_safety_violation:
+    - stop_workflow
+    - notify_security_team
+    - preserve_evidence
+
+notifications:
+  on_start:
+    - type: "slack"
+      channel: "#red-team-ops"
+      message: "Red team engagement started for {{ parameters.target }}"
+  
+  on_completion:
+    - type: "slack"
+      channel: "#red-team-ops"
+      message: "Red team engagement completed for {{ parameters.target }}"
+    - type: "email"
+      recipients: ["security-team@company.com"]
+      subject: "Red Team Engagement Report - {{ parameters.target }}"
+  
+  on_error:
+    - type: "slack"
+      channel: "#red-team-alerts"
+      message: "Red team engagement error for {{ parameters.target }}: {{ error.message }}"
+
+reporting:
+  generate_report: true
+  report_format: ["json", "pdf", "html"]
+  include_explanations: true
+  include_timeline: true
+  include_artifacts: true
+  
+output_schema:
+  engagement_id: "{{ variables.engagement_id }}"
+  target: "{{ parameters.target }}"
+  start_time: "{{ variables.start_time }}"
+  end_time: "{{ workflow.end_time }}"
+  duration: "{{ workflow.duration }}"
+  status: "{{ workflow.status }}"
+  results:
+    reconnaissance: "{{ steps.reconnaissance_phase.outputs }}"
+    c2_establishment: "{{ steps.c2_establishment.outputs }}"
+    post_exploitation: "{{ steps.post_exploitation.outputs }}"
+    safety_assessments: 
+      - "{{ steps.pre_engagement_safety_check.outputs }}"
+      - "{{ steps.safety_review_recon.outputs }}"
+      - "{{ steps.final_safety_review.outputs }}"
+    explanations:
+      - "{{ steps.recon_explanation.outputs }}"
+      - "{{ steps.c2_explanation.outputs }}"
+      - "{{ steps.post_exploit_explanation.outputs }}"
+  artifacts:
+    logs: "{{ workflow.logs }}"
+    evidence: "{{ workflow.evidence }}"
+    cleanup_status: "{{ steps.cleanup_phase.outputs }}"

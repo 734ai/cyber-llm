@@ -1,0 +1,222 @@
+name: "Reconnaissance Only Workflow"
+description: "Focused reconnaissance workflow for target assessment"
+version: "1.0"
+
+metadata:
+  author: "Cyber-LLM Team"
+  created: "2025-08-05"
+  tags: ["reconnaissance", "assessment", "passive", "active"]
+
+parameters:
+  target:
+    type: string
+    description: "Target IP address, domain, or network range"
+    required: true
+  recon_type:
+    type: string
+    description: "Type of reconnaissance to perform"
+    default: "balanced"
+    enum: ["passive", "active", "balanced", "aggressive"]
+  depth:
+    type: string
+    description: "Reconnaissance depth level"
+    default: "standard"
+    enum: ["surface", "standard", "deep", "comprehensive"]
+  time_limit:
+    type: integer
+    description: "Maximum time for reconnaissance in minutes"
+    default: 60
+
+variables:
+  recon_id: "{{ workflow.run_id }}"
+  target_sanitized: "{{ parameters.target | replace('.', '_') | replace('/', '_') }}"
+
+workflow:
+  steps:
+    - name: "target_validation"
+      description: "Validate target and check legal compliance"
+      agent: "safety_agent"
+      action: "validate_target"
+      inputs:
+        target: "{{ parameters.target }}"
+        operation_type: "reconnaissance"
+      outputs:
+        - target_valid
+        - legal_status
+        - risk_level
+      conditions:
+        success: "target_valid == true and legal_status == 'approved'"
+        failure: "stop_workflow"
+
+    - name: "passive_reconnaissance"
+      description: "Perform passive information gathering"
+      agent: "recon_agent"
+      action: "passive_recon"
+      inputs:
+        target: "{{ parameters.target }}"
+        depth: "{{ parameters.depth }}"
+      outputs:
+        - whois_info
+        - dns_records
+        - subdomain_enum
+        - search_engine_results
+        - social_media_intel
+        - leaked_credentials
+      depends_on: ["target_validation"]
+      timeout: 900  # 15 minutes
+
+    - name: "passive_recon_analysis"
+      description: "Analyze passive reconnaissance results"
+      agent: "explainability_agent"
+      action: "analyze_recon_results"
+      inputs:
+        recon_type: "passive"
+        results: "{{ steps.passive_reconnaissance.outputs }}"
+        target: "{{ parameters.target }}"
+      outputs:
+        - passive_analysis
+        - attack_surface_mapping
+        - priority_targets
+      depends_on: ["passive_reconnaissance"]
+
+    - name: "active_recon_decision"
+      description: "Decide if active reconnaissance is warranted"
+      agent: "safety_agent"
+      action: "assess_active_recon"
+      inputs:
+        passive_results: "{{ steps.passive_reconnaissance.outputs }}"
+        recon_type: "{{ parameters.recon_type }}"
+        risk_level: "{{ steps.target_validation.outputs.risk_level }}"
+      outputs:
+        - active_recon_approved
+        - recommended_techniques
+        - risk_mitigations
+      depends_on: ["passive_recon_analysis"]
+
+    - name: "active_reconnaissance"
+      description: "Perform active reconnaissance if approved"
+      agent: "recon_agent"
+      action: "active_recon"
+      inputs:
+        target: "{{ parameters.target }}"
+        techniques: "{{ steps.active_recon_decision.outputs.recommended_techniques }}"
+        stealth_level: "high"
+        time_limit: "{{ parameters.time_limit }}"
+      outputs:
+        - port_scan_results
+        - service_enumeration
+        - vulnerability_scan
+        - web_app_recon
+        - network_mapping
+      depends_on: ["active_recon_decision"]
+      conditions:
+        run_if: "steps.active_recon_decision.outputs.active_recon_approved == true"
+      timeout: "{{ parameters.time_limit * 60 }}"
+
+    - name: "active_recon_analysis"
+      description: "Analyze active reconnaissance results"
+      agent: "explainability_agent"
+      action: "analyze_recon_results"
+      inputs:
+        recon_type: "active"
+        results: "{{ steps.active_reconnaissance.outputs }}"
+        target: "{{ parameters.target }}"
+      outputs:
+        - active_analysis
+        - vulnerability_assessment
+        - entry_points
+      depends_on: ["active_reconnaissance"]
+      conditions:
+        run_if: "steps.active_reconnaissance.status == 'completed'"
+
+    - name: "comprehensive_analysis"
+      description: "Combine passive and active reconnaissance results"
+      agent: "recon_agent"
+      action: "comprehensive_analysis"
+      inputs:
+        passive_results: "{{ steps.passive_reconnaissance.outputs }}"
+        active_results: "{{ steps.active_reconnaissance.outputs }}"
+        passive_analysis: "{{ steps.passive_recon_analysis.outputs }}"
+        active_analysis: "{{ steps.active_recon_analysis.outputs }}"
+      outputs:
+        - complete_target_profile
+        - attack_vectors
+        - risk_assessment
+        - recommendations
+      depends_on: ["passive_recon_analysis"]
+
+    - name: "final_explanation"
+      description: "Generate comprehensive explanation of reconnaissance findings"
+      agent: "explainability_agent"
+      action: "generate_recon_report"
+      inputs:
+        target: "{{ parameters.target }}"
+        methodology: "{{ parameters.recon_type }}"
+        findings: "{{ steps.comprehensive_analysis.outputs }}"
+        timeline: "{{ workflow.execution_timeline }}"
+      outputs:
+        - executive_summary
+        - technical_findings
+        - risk_analysis
+        - next_steps
+      depends_on: ["comprehensive_analysis"]
+
+    - name: "safety_assessment"
+      description: "Final safety and compliance assessment"
+      agent: "safety_agent"
+      action: "final_recon_assessment"
+      inputs:
+        all_activities: "{{ workflow.all_actions }}"
+        target_impact: "{{ steps.comprehensive_analysis.outputs.risk_assessment }}"
+        findings: "{{ steps.comprehensive_analysis.outputs }}"
+      outputs:
+        - compliance_status
+        - ethical_assessment
+        - disclosure_recommendations
+      depends_on: ["comprehensive_analysis"]
+
+error_handling:
+  on_timeout:
+    - save_partial_results
+    - generate_timeout_report
+  
+  on_detection:
+    - pause_active_scans
+    - switch_to_passive_mode
+    - log_detection_event
+
+  on_target_unavailable:
+    - retry_with_different_approach
+    - log_availability_issue
+    - continue_with_passive_only
+
+notifications:
+  on_completion:
+    - type: "file"
+      path: "./reports/recon_{{ variables.target_sanitized }}_{{ workflow.start_time }}.json"
+    - type: "slack"
+      channel: "#recon-results"
+      message: "Reconnaissance completed for {{ parameters.target }}"
+
+reporting:
+  formats: ["json", "html", "markdown"]
+  include_raw_data: true
+  include_analysis: true
+  include_recommendations: true
+  
+  sections:
+    - name: "Executive Summary"
+      content: "{{ steps.final_explanation.outputs.executive_summary }}"
+    - name: "Methodology"
+      content: "Reconnaissance type: {{ parameters.recon_type }}, Depth: {{ parameters.depth }}"
+    - name: "Passive Reconnaissance"
+      content: "{{ steps.passive_recon_analysis.outputs }}"
+    - name: "Active Reconnaissance"
+      content: "{{ steps.active_recon_analysis.outputs }}"
+      condition: "steps.active_reconnaissance.status == 'completed'"
+    - name: "Comprehensive Analysis"
+      content: "{{ steps.comprehensive_analysis.outputs }}"
+    - name: "Risk Assessment"
+      content: "{{ steps.safety_assessment.outputs }}"
+    - name: "Recommendations"
+      content: "{{ steps.final_explanation.outputs.next_steps }}"
