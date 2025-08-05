@@ -1,0 +1,40 @@
+{
+	"servers": {
+		"my-mcp-server-eea21277": {
+			"type": "stdio",
+			"command": "mcp.json",
+			"args": []
+		}
+	},
+	"inputs": []
+}
+
+{
+  "project": "Cyber-LLM",
+  "version": "0.4.0",
+  "modules": [
+    {"name":"ReconOps","type":"lora","path":"adapters/recon_lora.pt"},
+    {"name":"C2Ops","type":"lora","path":"adapters/c2_lora.pt"},
+    {"name":"PostExploit","type":"lora","path":"adapters/postexploit_lora.pt"},
+    {"name":"Explainability","type":"lora","path":"adapters/explain_lora.pt"},
+    {"name":"Safety","type":"lora","path":"adapters/safety_lora.pt"}
+  ],
+  "agents": [
+    {"id":"setup_environment","entry":"agent-instructions.md#setup_environment"},
+    {"id":"ingest_and_validate_data","entry":"agent-instructions.md#ingest_and_validate_data"},
+    {"id":"train_adapters","entry":"agent-instructions.md#train_adapters"},
+    {"id":"generate_agent_code","entry":"agent-instructions.md#generate_agent_code"},
+    {"id":"orchestrate_pipeline","entry":"agent-instructions.md#orchestrate_pipeline"},
+    {"id":"ci_cd_and_deploy","entry":"agent-instructions.md#ci_cd_and_deploy"},
+    {"id":"evaluate_and_report","entry":"agent-instructions.md#evaluate_and_report"}
+  ],
+  "orchestrator": "src/agents/orchestrator.py",
+  "workflows": "src/orchestration/workflows",
+  "ci": {
+    "github_actions": ".github/workflows/ci.yaml"
+  },
+  "monitoring": {
+    "prometheus": "monitoring/prometheus.yaml",
+    "grafana": "monitoring/grafana/dashboard.json"
+  }
+}

@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  # Main Cyber-LLM API service
+  cyber-llm-api:
+    build:
+      context: ../../../
+      dockerfile: src/deployment/docker/Dockerfile
+      target: production
+    container_name: cyber-llm-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/home/cyberllm
+      - CUDA_VISIBLE_DEVICES=0
+      - TRANSFORMERS_CACHE=/home/cyberllm/models/cache
+    volumes:
+      - ./data:/home/cyberllm/data
+      - ./models:/home/cyberllm/models
+      - ./logs:/home/cyberllm/logs
+      - ./configs:/home/cyberllm/configs
+    networks:
+      - cyber-llm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Training service (optional)
+  cyber-llm-training:
+    build:
+      context: ../../../
+      dockerfile: src/deployment/docker/Dockerfile
+      target: training
+    container_name: cyber-llm-training
+    environment:
+      - PYTHONPATH=/home/cyberllm
+      - CUDA_VISIBLE_DEVICES=0
+      - WANDB_API_KEY=${WANDB_API_KEY}
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./data:/home/cyberllm/data
+      - ./models:/home/cyberllm/models
+      - ./logs:/home/cyberllm/logs
+      - ./configs:/home/cyberllm/configs
+    networks:
+      - cyber-llm-network
+    profiles:
+      - training
+    depends_on:
+      - mlflow
+
+  # MLflow tracking server
+  mlflow:
+    image: python:3.10-slim
+    container_name: cyber-llm-mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    volumes:
+      - ./mlflow:/mlflow
+    networks:
+      - cyber-llm-network
+    command: >
+      bash -c "
+        pip install mlflow &&
+        mlflow server 
+          --backend-store-uri sqlite:///mlflow/mlflow.db 
+          --default-artifact-root /mlflow/artifacts 
+          --host 0.0.0.0 
+          --port 5000
+      "
+    profiles:
+      - training
+      - monitoring
+
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cyber-llm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - cyber-llm-network
+    profiles:
+      - monitoring
+
+  # Grafana dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cyber-llm-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - ./monitoring/grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - cyber-llm-network
+    profiles:
+      - monitoring
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: cyber-llm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - cyber-llm-network
+    profiles:
+      - cache
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: cyber-llm-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    networks:
+      - cyber-llm-network
+    depends_on:
+      - cyber-llm-api
+    profiles:
+      - production
+
+networks:
+  cyber-llm-network:
+    driver: bridge
+
+volumes:
+  data:
+  models:
+  logs:
+  mlflow:
+  prometheus_data:
+  grafana_data:
+  redis_data:

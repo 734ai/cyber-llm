@@ -1,0 +1,54 @@
+# Core Modeling & PEFT
+transformers>=4.33.0
+peft>=0.4.0
+trl>=0.4.0
+accelerate>=0.20.0
+langchain>=0.0.300
+
+# Deep Learning
+torch>=2.0.0
+sentencepiece
+
+# Data & Versioning
+datasets
+dvc>=2.0.0
+mlflow
+wandb
+
+# PDF, OCR & Embedding
+pdfminer.six
+pypdf2
+faiss-cpu
+numpy
+scikit-learn
+
+# Agents, Orchestration & CLI
+fastapi
+uvicorn
+pydantic
+pyyaml
+requests
+click
+
+# Security & Testing
+bandit
+trivy
+pytest
+pytest-cov
+safety
+
+# Deployment & Infrastructure
+docker
+kubernetes
+helm
+helmfile
+terraform
+
+# Monitoring & Logging
+prometheus-client
+grafana-api-client
+slack-sdk
+
+# Utilities
+python-dotenv
+loguru
