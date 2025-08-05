@@ -1,0 +1,29 @@
+{
+  "project": "Cyber-LLM",
+  "version": "0.4.0",
+  "author": "Muzan Sano",
+  "email": "sanosensei36@gmail.com",
+  "modules": [
+    {"name":"ReconOps","type":"lora","path":"adapters/recon_lora.pt"},
+    {"name":"C2Ops","type":"lora","path":"adapters/c2_lora.pt"},
+    {"name":"PostExploit","type":"lora","path":"adapters/postexploit_lora.pt"},
+    {"name":"Explainability","type":"lora","path":"adapters/explain_lora.pt"},
+    {"name":"Safety","type":"lora","path":"adapters/safety_lora.pt"}
+  ],
+  "agents": [
+    {"id":"recon","entry":"src/agents/recon_agent.py"},
+    {"id":"c2","entry":"src/agents/c2_agent.py"},
+    {"id":"post_exploit","entry":"src/agents/post_exploit_agent.py"},
+    {"id":"explainability","entry":"src/agents/explainability_agent.py"},
+    {"id":"safety","entry":"src/agents/safety_agent.py"}
+  ],
+  "orchestrator": "src/agents/orchestrator.py",
+  "workflows": "src/orchestration/workflows",
+  "ci": {
+    "github_actions": ".github/workflows/ci.yaml"
+  },
+  "monitoring": {
+    "prometheus": "src/monitoring/prometheus.yaml",
+    "grafana": "src/monitoring/dashboards/dashboard.json"
+  }
+}

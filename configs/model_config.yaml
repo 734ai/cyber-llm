@@ -1,0 +1,45 @@
+# Model Configuration
+model:
+  base_model: "microsoft/Phi-3-mini-4k-instruct"
+  model_type: "phi3"
+  max_length: 4096
+  temperature: 0.7
+  top_p: 0.9
+  
+# LoRA Configuration
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.1
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+  
+# Training Configuration
+training:
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2e-4
+  num_epochs: 3
+  warmup_steps: 100
+  save_steps: 500
+  eval_steps: 250
+  logging_steps: 50
+  
+# Data Configuration
+data:
+  max_seq_length: 2048
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  
+# MLOps Configuration
+mlops:
+  use_wandb: true
+  use_mlflow: true
+  experiment_name: "cyber-llm-training"
+  run_name: "baseline-v1"
+  
+# Safety Configuration
+safety:
+  enable_content_filter: true
+  opsec_check: true
+  max_risk_score: 0.7
