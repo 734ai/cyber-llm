@@ -1,0 +1,162 @@
+name: "advanced_red_team_exercise"
+description: "Comprehensive red team exercise with dynamic adaptation"
+version: "2.0"
+timeout: 3600  # 1 hour
+parallel_execution: true
+dynamic_adaptation: true
+rollback_enabled: true
+
+stages:
+  reconnaissance:
+    type: "parallel"
+    agents: ["recon_agent"]
+    external_tools: ["nmap", "shodan", "amass"]
+    timeout: 600
+    adaptation_rules:
+      - condition: "target_ports_found > 50"
+        action: "increase_scan_depth"
+        parameters:
+          depth: 2
+      - condition: "stealth_score < 0.7"
+        action: "reduce_scan_frequency"
+        parameters:
+          delay: 5
+    tasks:
+      - name: "network_discovery"
+        agent: "recon_agent"
+        action: "discover_network"
+        parameters:
+          target: "${workflow.target}"
+          scan_type: "stealth"
+          timeout: 300
+        success_criteria:
+          min_hosts_found: 1
+          stealth_score: 0.7
+      
+      - name: "service_enumeration"
+        agent: "recon_agent"
+        action: "enumerate_services"
+        dependencies: ["network_discovery"]
+        parameters:
+          targets: "${reconnaissance.network_discovery.hosts}"
+          depth: "moderate"
+      
+      - name: "vulnerability_assessment"
+        external_tool: "nessus"
+        parameters:
+          targets: "${reconnaissance.service_enumeration.services}"
+          scan_template: "advanced"
+        parallel: true
+
+  initial_access:
+    type: "sequential"
+    agents: ["c2_agent"]
+    external_tools: ["metasploit", "burp_suite"]
+    dependencies: ["reconnaissance"]
+    timeout: 900
+    rollback_point: true
+    adaptation_rules:
+      - condition: "exploit_attempts > 3 and success_rate < 0.3"
+        action: "switch_strategy"
+        parameters:
+          strategy: "social_engineering"
+    tasks:
+      - name: "exploit_selection"
+        agent: "c2_agent"
+        action: "select_exploits"
+        parameters:
+          vulnerabilities: "${reconnaissance.vulnerability_assessment.findings}"
+          target_os: "${reconnaissance.network_discovery.os_info}"
+          stealth_required: true
+      
+      - name: "payload_generation"
+        external_tool: "metasploit"
+        action: "generate_payload"
+        parameters:
+          exploit: "${initial_access.exploit_selection.chosen_exploit}"
+          target: "${workflow.target}"
+          avoid_detection: true
+      
+      - name: "exploitation"
+        agent: "c2_agent"
+        action: "execute_exploit"
+        parameters:
+          payload: "${initial_access.payload_generation.payload}"
+          target: "${workflow.target}"
+          max_attempts: 3
+        success_criteria:
+          shell_obtained: true
+          detection_avoided: true
+
+  post_exploitation:
+    type: "parallel"
+    agents: ["post_exploit_agent"]
+    dependencies: ["initial_access"]
+    timeout: 1200
+    conditional:
+      condition: "initial_access.exploitation.success == True"
+      else_action: "skip_stage"
+    tasks:
+      - name: "privilege_escalation"
+        agent: "post_exploit_agent"
+        action: "escalate_privileges"
+        parameters:
+          session: "${initial_access.exploitation.session}"
+          target_privilege: "system"
+        priority: "high"
+      
+      - name: "persistence"
+        agent: "post_exploit_agent"
+        action: "establish_persistence"
+        parameters:
+          session: "${initial_access.exploitation.session}"
+          method: "service"
+          stealth: true
+        priority: "normal"
+      
+      - name: "lateral_movement"
+        agent: "post_exploit_agent"
+        action: "move_laterally"
+        dependencies: ["privilege_escalation"]
+        parameters:
+          session: "${initial_access.exploitation.session}"
+          discovery_method: "active_directory"
+        priority: "high"
+
+  cleanup:
+    type: "sequential"
+    agents: ["post_exploit_agent", "safety_agent"]
+    always_execute: true
+    timeout: 300
+    tasks:
+      - name: "remove_persistence"
+        agent: "post_exploit_agent"
+        action: "cleanup_persistence"
+        parameters:
+          persistence_info: "${post_exploitation.persistence.info}"
+      
+      - name: "close_sessions"
+        agent: "post_exploit_agent"
+        action: "cleanup_sessions"
+        parameters:
+          sessions: "${workflow.active_sessions}"
+      
+      - name: "safety_verification"
+        agent: "safety_agent"
+        action: "verify_cleanup"
+        parameters:
+          target: "${workflow.target}"
+          cleanup_actions: "${cleanup.remove_persistence.actions}"
+
+success_criteria:
+  overall:
+    min_stages_completed: 3
+    stealth_score: 0.8
+    safety_compliance: 0.95
+
+failure_handling:
+  max_retries: 2
+  rollback_on_failure: true
+  escalation_rules:
+    - condition: "detection_probability > 0.8"
+      action: "immediate_cleanup"

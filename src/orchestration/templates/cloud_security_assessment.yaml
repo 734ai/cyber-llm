@@ -1,0 +1,200 @@
+name: "cloud_security_assessment"
+description: "Comprehensive cloud infrastructure security assessment"
+version: "2.0"
+timeout: 2700  # 45 minutes
+parallel_execution: true
+dynamic_adaptation: true
+
+stages:
+  cloud_reconnaissance:
+    type: "parallel"
+    agents: ["recon_agent"]
+    external_tools: ["aws_cli", "azure_cli", "gcp_cli", "prowler", "scout_suite"]
+    timeout: 600
+    adaptation_rules:
+      - condition: "services_discovered > 50"
+        action: "prioritize_high_risk_services"
+        parameters:
+          focus_services: ["s3", "rds", "iam", "lambda", "ecs"]
+    tasks:
+      - name: "cloud_service_discovery"
+        agent: "recon_agent"
+        action: "discover_cloud_services"
+        parameters:
+          cloud_provider: "${workflow.cloud_provider}"
+          regions: "${workflow.target_regions}"
+          service_types: "all"
+        success_criteria:
+          min_services_found: 5
+      
+      - name: "iam_enumeration"
+        agent: "recon_agent"
+        action: "enumerate_iam"
+        parameters:
+          cloud_provider: "${workflow.cloud_provider}"
+          enumerate_users: true
+          enumerate_roles: true
+          enumerate_policies: true
+      
+      - name: "network_topology_mapping"
+        agent: "recon_agent"
+        action: "map_network_topology"
+        parameters:
+          vpcs: "${cloud_reconnaissance.cloud_service_discovery.vpcs}"
+          subnets: true
+          security_groups: true
+          nacls: true
+
+  configuration_assessment:
+    type: "parallel"
+    external_tools: ["prowler", "scout_suite", "checkov"]
+    dependencies: ["cloud_reconnaissance"]
+    timeout: 900
+    tasks:
+      - name: "cis_benchmark_check"
+        external_tool: "prowler"
+        parameters:
+          provider: "${workflow.cloud_provider}"
+          checks: "cis_level2"
+          regions: "${workflow.target_regions}"
+          output_format: "json"
+        timeout: 600
+      
+      - name: "security_posture_assessment"
+        external_tool: "scout_suite"
+        parameters:
+          provider: "${workflow.cloud_provider}"
+          services: ["iam", "s3", "ec2", "rds", "lambda"]
+          report_format: "json"
+        timeout: 500
+      
+      - name: "infrastructure_as_code_scan"
+        external_tool: "checkov"
+        parameters:
+          scan_type: "terraform"
+          directory: "${workflow.iac_directory}"
+          framework: "terraform"
+        conditional:
+          condition: "workflow.iac_directory != ''"
+
+  privilege_escalation_analysis:
+    type: "sequential"
+    agents: ["c2_agent"]
+    dependencies: ["configuration_assessment"]
+    timeout: 600
+    tasks:
+      - name: "iam_privilege_analysis"
+        agent: "c2_agent"
+        action: "analyze_privilege_escalation"
+        parameters:
+          iam_data: "${cloud_reconnaissance.iam_enumeration.data}"
+          policies: "${cloud_reconnaissance.iam_enumeration.policies}"
+          focus_on: "privilege_escalation_paths"
+      
+      - name: "service_privilege_testing"
+        agent: "c2_agent"
+        action: "test_service_privileges"
+        parameters:
+          services: "${cloud_reconnaissance.cloud_service_discovery.high_risk_services}"
+          test_actions: ["data_access", "configuration_change", "resource_creation"]
+          safety_mode: true
+
+  data_exposure_assessment:
+    type: "parallel"
+    agents: ["recon_agent", "safety_agent"]
+    dependencies: ["configuration_assessment"]
+    timeout: 800
+    tasks:
+      - name: "storage_exposure_check"
+        agent: "recon_agent"
+        action: "check_storage_exposure"
+        parameters:
+          storage_services: "${cloud_reconnaissance.cloud_service_discovery.storage}"
+          check_public_access: true
+          check_encryption: true
+          sample_data: false  # Safety first
+      
+      - name: "database_exposure_check"
+        agent: "recon_agent"
+        action: "check_database_exposure"
+        parameters:
+          databases: "${cloud_reconnaissance.cloud_service_discovery.databases}"
+          check_public_access: true
+          check_encryption: true
+          test_authentication: true
+      
+      - name: "data_classification_check"
+        agent: "safety_agent"
+        action: "classify_exposed_data"
+        parameters:
+          exposed_resources: "${data_exposure_assessment.storage_exposure_check.exposed}"
+          classification_rules: "gdpr_pii"
+          alert_on_sensitive: true
+
+  network_security_assessment:
+    type: "parallel"
+    agents: ["recon_agent", "c2_agent"]
+    dependencies: ["cloud_reconnaissance"]
+    timeout: 700
+    tasks:
+      - name: "security_group_analysis"
+        agent: "recon_agent"
+        action: "analyze_security_groups"
+        parameters:
+          security_groups: "${cloud_reconnaissance.network_topology_mapping.security_groups}"
+          check_overly_permissive: true
+          flag_internet_facing: true
+      
+      - name: "network_acl_analysis"
+        agent: "recon_agent"
+        action: "analyze_network_acls"
+        parameters:
+          nacls: "${cloud_reconnaissance.network_topology_mapping.nacls}"
+          check_default_deny: true
+          check_rule_conflicts: true
+      
+      - name: "lateral_movement_analysis"
+        agent: "c2_agent"
+        action: "analyze_lateral_movement"
+        parameters:
+          network_topology: "${cloud_reconnaissance.network_topology_mapping.topology}"
+          trust_relationships: "${cloud_reconnaissance.iam_enumeration.cross_account_trusts}"
+          simulation_mode: true
+
+  compliance_assessment:
+    type: "sequential"
+    agents: ["safety_agent", "explainability_agent"]
+    dependencies: ["configuration_assessment", "data_exposure_assessment"]
+    timeout: 400
+    tasks:
+      - name: "regulatory_compliance_check"
+        agent: "safety_agent"
+        action: "check_regulatory_compliance"
+        parameters:
+          frameworks: ["gdpr", "sox", "pci_dss", "hipaa"]
+          findings: "${configuration_assessment.findings}"
+          data_findings: "${data_exposure_assessment.findings}"
+      
+      - name: "compliance_gap_analysis"
+        agent: "explainability_agent"
+        action: "analyze_compliance_gaps"
+        parameters:
+          compliance_results: "${compliance_assessment.regulatory_compliance_check.results}"
+          business_requirements: "${workflow.compliance_requirements}"
+          priority_frameworks: "${workflow.priority_compliance}"
+
+success_criteria:
+  overall:
+    min_stages_completed: 5
+    critical_findings_identified: true
+    compliance_coverage: 0.9
+    safety_compliance: 0.98
+
+failure_handling:
+  max_retries: 1
+  rollback_on_failure: false
+  escalation_rules:
+    - condition: "sensitive_data_exposed == true"
+      action: "immediate_alert"
+    - condition: "privilege_escalation_confirmed == true"
+      action: "detailed_documentation"

@@ -1,0 +1,218 @@
+name: "web_app_security_assessment"
+description: "Comprehensive web application security testing"
+version: "2.0"
+timeout: 2400  # 40 minutes
+parallel_execution: true
+dynamic_adaptation: true
+
+stages:
+  reconnaissance:
+    type: "parallel"
+    agents: ["recon_agent"]
+    external_tools: ["burp_suite", "dirb", "nikto"]
+    timeout: 600
+    adaptation_rules:
+      - condition: "found_endpoints > 100"
+        action: "focus_on_high_value_targets"
+        parameters:
+          filter_priority: "high"
+      - condition: "waf_detected == true"
+        action: "enable_evasion_techniques"
+        parameters:
+          evasion_level: 2
+    tasks:
+      - name: "web_discovery"
+        agent: "recon_agent"
+        action: "discover_web_assets"
+        parameters:
+          target: "${workflow.target}"
+          depth: 3
+          follow_redirects: true
+          spider_timeout: 300
+        success_criteria:
+          min_endpoints_found: 10
+      
+      - name: "technology_fingerprinting"
+        external_tool: "whatweb"
+        parameters:
+          target: "${workflow.target}"
+          aggression: 3
+        parallel: true
+      
+      - name: "directory_enumeration"
+        external_tool: "dirb"
+        parameters:
+          target: "${workflow.target}"
+          wordlist: "common"
+          extensions: ["php", "asp", "jsp", "html"]
+        parallel: true
+      
+      - name: "waf_detection"
+        agent: "recon_agent"
+        action: "detect_waf"
+        parameters:
+          target: "${workflow.target}"
+          test_payloads: ["<script>", "' OR 1=1", "../../../etc/passwd"]
+
+  vulnerability_scanning:
+    type: "parallel"
+    external_tools: ["burp_suite", "owasp_zap", "sqlmap"]
+    dependencies: ["reconnaissance"]
+    timeout: 1200
+    adaptation_rules:
+      - condition: "sql_injection_found == true"
+        action: "deep_sql_analysis"
+        parameters:
+          techniques: ["union", "boolean", "time", "error"]
+      - condition: "xss_found == true"
+        action: "xss_exploitation_analysis"
+        parameters:
+          contexts: ["reflected", "stored", "dom"]
+    tasks:
+      - name: "automated_scan"
+        external_tool: "owasp_zap"
+        parameters:
+          target: "${workflow.target}"
+          scan_policy: "full"
+          spider_depth: 5
+          passive_scan: true
+          active_scan: true
+        timeout: 900
+      
+      - name: "burp_active_scan"
+        external_tool: "burp_suite"
+        parameters:
+          target: "${workflow.target}"
+          scan_type: "crawl_and_audit"
+          form_submission: true
+          login_required: "${workflow.login_required}"
+          credentials: "${workflow.test_credentials}"
+        timeout: 800
+      
+      - name: "sql_injection_test"
+        external_tool: "sqlmap"
+        parameters:
+          urls: "${reconnaissance.web_discovery.forms}"
+          risk: 2
+          level: 3
+          techniques: "BEUSTQ"
+          batch: true
+        timeout: 600
+        conditional:
+          condition: "reconnaissance.web_discovery.forms_count > 0"
+
+  manual_testing:
+    type: "sequential"
+    agents: ["recon_agent", "c2_agent"]
+    dependencies: ["vulnerability_scanning"]
+    timeout: 900
+    tasks:
+      - name: "business_logic_testing"
+        agent: "recon_agent"
+        action: "test_business_logic"
+        parameters:
+          application_map: "${reconnaissance.web_discovery.map}"
+          user_roles: "${workflow.user_roles}"
+          test_cases: ["price_manipulation", "workflow_bypass", "privilege_escalation"]
+      
+      - name: "authentication_bypass"
+        agent: "c2_agent"
+        action: "test_auth_bypass"
+        parameters:
+          auth_endpoints: "${reconnaissance.web_discovery.auth_endpoints}"
+          methods: ["parameter_pollution", "race_condition", "jwt_manipulation"]
+          test_accounts: "${workflow.test_accounts}"
+      
+      - name: "session_management_test"
+        agent: "c2_agent"
+        action: "test_session_security"
+        parameters:
+          session_endpoints: "${reconnaissance.web_discovery.session_endpoints}"
+          tests: ["session_fixation", "concurrent_sessions", "session_timeout"]
+      
+      - name: "input_validation_test"
+        agent: "recon_agent"
+        action: "test_input_validation"
+        parameters:
+          input_points: "${reconnaissance.web_discovery.input_points}"
+          payloads: ["xss", "xxe", "ssti", "path_traversal", "command_injection"]
+
+  exploitation_validation:
+    type: "sequential"
+    agents: ["c2_agent", "safety_agent"]
+    dependencies: ["manual_testing"]
+    timeout: 600
+    conditional:
+      condition: "vulnerability_scanning.critical_findings > 0 or manual_testing.exploitable_issues > 0"
+    tasks:
+      - name: "exploit_validation"
+        agent: "c2_agent"
+        action: "validate_exploits"
+        parameters:
+          findings: "${vulnerability_scanning.findings}"
+          manual_findings: "${manual_testing.findings}"
+          safety_mode: true
+          max_impact: "medium"
+      
+      - name: "impact_assessment"
+        agent: "c2_agent"
+        action: "assess_impact"
+        parameters:
+          validated_exploits: "${exploitation_validation.exploit_validation.results}"
+          business_context: "${workflow.business_context}"
+      
+      - name: "safety_check"
+        agent: "safety_agent"
+        action: "verify_safe_testing"
+        parameters:
+          test_actions: "${exploitation_validation.exploit_validation.actions}"
+          target_environment: "${workflow.environment_type}"
+
+  reporting:
+    type: "sequential"
+    agents: ["recon_agent", "explainability_agent"]
+    dependencies: ["exploitation_validation"]
+    always_execute: true
+    timeout: 300
+    tasks:
+      - name: "findings_compilation"
+        agent: "recon_agent"
+        action: "compile_findings"
+        parameters:
+          scan_results: "${vulnerability_scanning}"
+          manual_results: "${manual_testing}"
+          exploit_results: "${exploitation_validation}"
+          severity_mapping: "owasp"
+      
+      - name: "risk_analysis"
+        agent: "explainability_agent"
+        action: "analyze_risk"
+        parameters:
+          findings: "${reporting.findings_compilation.findings}"
+          business_impact: "${workflow.business_impact_weights}"
+          threat_landscape: "${workflow.threat_context}"
+      
+      - name: "report_generation"
+        agent: "explainability_agent"
+        action: "generate_security_report"
+        parameters:
+          findings: "${reporting.findings_compilation.findings}"
+          risk_analysis: "${reporting.risk_analysis.analysis}"
+          format: "comprehensive"
+          include_remediation: true
+
+success_criteria:
+  overall:
+    min_stages_completed: 4
+    findings_quality_score: 0.8
+    false_positive_rate: 0.1
+    safety_compliance: 0.95
+
+failure_handling:
+  max_retries: 1
+  rollback_on_failure: false
+  escalation_rules:
+    - condition: "target_unavailable == true"
+      action: "pause_and_notify"
+    - condition: "safety_violation == true"
+      action: "immediate_stop"
