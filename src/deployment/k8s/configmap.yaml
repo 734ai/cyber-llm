@@ -1,0 +1,60 @@
+# ConfigMap for Cyber-LLM configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cyber-llm-config
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: config
+data:
+  # Application configuration
+  PYTHONPATH: "/app"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+  
+  # Model configuration
+  MODEL_CACHE_DIR: "/app/models/cache"
+  ADAPTER_PATH: "/app/adapters"
+  
+  # API configuration
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  API_WORKERS: "4"
+  
+  # Database configuration
+  DATABASE_URL: "postgresql://cyber_llm:password@postgres:5432/cyber_llm"
+  
+  # Redis configuration
+  REDIS_URL: "redis://redis:6379/0"
+  
+  # Monitoring configuration
+  PROMETHEUS_PORT: "9090"
+  METRICS_ENABLED: "true"
+  
+  # Security configuration
+  CORS_ORIGINS: "*"
+  ALLOWED_HOSTS: "*"
+
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cyber-llm-secrets
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: secrets
+type: Opaque
+stringData:
+  # Database credentials
+  DATABASE_PASSWORD: "secure_password_change_me"
+  
+  # API keys
+  WANDB_API_KEY: "your_wandb_api_key"
+  HUGGINGFACE_TOKEN: "your_hf_token"
+  
+  # Encryption keys
+  SECRET_KEY: "your_secret_key_change_me"
+  JWT_SECRET: "your_jwt_secret_change_me"

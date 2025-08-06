@@ -1,0 +1,33 @@
+# Kubernetes Namespace for Cyber-LLM
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/part-of: cyber-llm-platform
+    security.policy: restricted
+  annotations:
+    description: "Cybersecurity AI platform namespace"
+---
+# Network Policy for security isolation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cyber-llm-network-policy
+  namespace: cyber-llm
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-system
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring-system
+  egress:
+  - {}  # Allow all outbound traffic (can be restricted based on requirements)

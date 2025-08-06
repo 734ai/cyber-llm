@@ -1,0 +1,113 @@
+# Prometheus Alert Rules for Cyber-LLM
+groups:
+  - name: cyber-llm-alerts
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: cyber-llm
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for {{ $labels.instance }}"
+
+      # High response time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          service: cyber-llm
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s"
+
+      # Low availability
+      - alert: ServiceDown
+        expr: up{job="cyber-llm-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cyber-llm
+        annotations:
+          summary: "Cyber-LLM API is down"
+          description: "Service {{ $labels.instance }} is down"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / node_memory_MemTotal_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: cyber-llm
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: cyber-llm
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      # GPU utilization
+      - alert: HighGPUUtilization
+        expr: nvidia_gpu_utilization > 90
+        for: 15m
+        labels:
+          severity: warning
+          service: cyber-llm
+        annotations:
+          summary: "High GPU utilization"
+          description: "GPU utilization is {{ $value }}%"
+
+      # Low disk space
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: cyber-llm
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10% on {{ $labels.instance }}"
+
+      # Failed model predictions
+      - alert: HighModelFailureRate
+        expr: rate(model_prediction_failures_total[5m]) / rate(model_predictions_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: cyber-llm
+        annotations:
+          summary: "High model failure rate"
+          description: "Model failure rate is {{ $value | humanizePercentage }}"
+
+      # Suspicious activity detection
+      - alert: SuspiciousActivity
+        expr: rate(security_violations_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          service: cyber-llm-security
+        annotations:
+          summary: "Suspicious activity detected"
+          description: "Security violations detected at {{ $value }} per second"
+
+      # Agent orchestration failures
+      - alert: AgentOrchestrationFailure
+        expr: rate(agent_orchestration_failures_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: cyber-llm-agents
+        annotations:
+          summary: "Agent orchestration failures"
+          description: "Agent orchestration failure rate is high"

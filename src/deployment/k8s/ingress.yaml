@@ -1,0 +1,89 @@
+# Ingress for Cyber-LLM API
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cyber-llm-ingress
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit-rps: "10"
+    nginx.ingress.kubernetes.io/rate-limit-connections: "5"
+    
+    # Load balancing
+    nginx.ingress.kubernetes.io/load-balance: "ewma"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Content-Type-Options nosniff;
+      add_header X-Frame-Options DENY;
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header Referrer-Policy strict-origin-when-cross-origin;
+    
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+    
+    # Certificate Manager (if cert-manager is installed)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # AWS ALB annotations (if using AWS ALB Controller)
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:region:account-id:certificate/cert-id"
+spec:
+  tls:
+  - hosts:
+    - api.cyber-llm.example.com
+    secretName: cyber-llm-tls
+  rules:
+  - host: api.cyber-llm.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: cyber-llm-api-service
+            port:
+              number: 8000
+      # Health check endpoint
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: cyber-llm-api-service
+            port:
+              number: 8000
+      # Metrics endpoint (protected)
+      - path: /metrics
+        pathType: Exact
+        backend:
+          service:
+            name: cyber-llm-api-service
+            port:
+              number: 8000
+
+---
+# TLS Certificate Secret (if not using cert-manager)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cyber-llm-tls
+  namespace: cyber-llm
+type: kubernetes.io/tls
+data:
+  # Base64 encoded certificate and key
+  tls.crt: LS0tLS1CRUdJTi... # Your certificate here
+  tls.key: LS0tLS1CRUdJTi... # Your private key here

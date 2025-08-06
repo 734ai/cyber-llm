@@ -1,0 +1,68 @@
+# Cyber-LLM API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: cyber-llm-api-service
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: api
+
+---
+# Cyber-LLM Load Balancer Service (for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: cyber-llm-external-service
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: external
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: http
+    protocol: TCP
+    name: https
+  selector:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: api
+  sessionAffinity: ClientIP
+
+---
+# Headless Service for StatefulSet (if needed for agent coordination)
+apiVersion: v1
+kind: Service
+metadata:
+  name: cyber-llm-headless
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: headless
+spec:
+  clusterIP: None
+  ports:
+  - port: 8000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: cyber-llm

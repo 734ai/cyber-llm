@@ -1,0 +1,85 @@
+# RBAC Configuration for Cyber-LLM
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cyber-llm-service-account
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: rbac
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cyber-llm-role
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: rbac
+rules:
+# Pod management permissions (for agent scaling)
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["get"]
+# ConfigMap and Secret access
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+# Events for monitoring
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cyber-llm-role-binding
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: cyber-llm-service-account
+  namespace: cyber-llm
+roleRef:
+  kind: Role
+  name: cyber-llm-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ClusterRole for cross-namespace operations (if needed)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cyber-llm-cluster-role
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: rbac
+rules:
+# Metrics collection
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cyber-llm-cluster-role-binding
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: rbac
+subjects:
+- kind: ServiceAccount
+  name: cyber-llm-service-account
+  namespace: cyber-llm
+roleRef:
+  kind: ClusterRole
+  name: cyber-llm-cluster-role
+  apiGroup: rbac.authorization.k8s.io

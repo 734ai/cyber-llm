@@ -1,0 +1,51 @@
+# Persistent Volume Claims for Cyber-LLM
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cyber-llm-models-pvc
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+  
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cyber-llm-data-pvc
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+
+---
+# PVC for logs (optional, can use ephemeral storage)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cyber-llm-logs-pvc
+  namespace: cyber-llm
+  labels:
+    app.kubernetes.io/name: cyber-llm
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
