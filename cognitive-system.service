@@ -1,0 +1,28 @@
+[Unit]
+Description=Persistent Cognitive Multi-Agent System
+After=network.target
+
+[Service]
+Type=simple
+User=cognitive
+Group=cognitive
+WorkingDirectory=/home/o1/Desktop/cyber_llm
+ExecStart=/home/o1/Desktop/cyber_llm/start_cognitive_system.sh
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cognitive-system
+
+# Environment
+Environment=PYTHONPATH=/home/o1/Desktop/cyber_llm/src
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/home/o1/Desktop/cyber_llm/data /home/o1/Desktop/cyber_llm/logs /home/o1/Desktop/cyber_llm/temp
+
+[Install]
+WantedBy=multi-user.target
